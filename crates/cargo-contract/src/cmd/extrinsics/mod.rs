@@ -386,9 +386,8 @@ where
         .map(|acc| acc.nonce)
         .unwrap_or_default();
     let nonce_offset: u32 = env::var("NONCE_OFFSET")
-        .unwrap_or_default()
-        .parse()
-        .expect("you are smarter than that");
+        .map(|val| val.parse().expect("you are smarter than this"))
+        .unwrap_or_default();
     let nonce = current_nonce.checked_add(nonce_offset).expect("really?");
     client
         .tx()
