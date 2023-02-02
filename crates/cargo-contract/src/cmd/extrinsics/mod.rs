@@ -385,10 +385,12 @@ where
         .await?
         .map(|acc| acc.nonce)
         .unwrap_or_default();
+    println!("current nonce: {}", current_nonce);
     let nonce_offset: u32 = env::var("NONCE_OFFSET")
         .map(|val| val.parse().expect("you are smarter than this"))
         .unwrap_or_default();
     let nonce = current_nonce.checked_add(nonce_offset).expect("really?");
+    println!("env var nonce: {}", nonce);
     client
         .tx()
         .create_signed_with_nonce(call, signer, nonce.into(), Default::default())?
