@@ -39,12 +39,15 @@ use jsonrpsee::{
     ws_client::WsClientBuilder,
 };
 use std::{
+    borrow::Borrow,
+    env,
     io::{
         self,
         Write,
     },
     path::PathBuf,
 };
+use subxt::utils::AccountId32;
 
 use crate::DEFAULT_KEY_COL_WIDTH;
 use contract_build::{
@@ -357,21 +360,40 @@ pub fn display_contract_exec_result_debug<R, const WIDTH: usize>(
 ///
 /// Currently this will report success once the transaction is included in a block. In the future
 /// there could be a flag to wait for finality before reporting success.
-async fn submit_extrinsic<T, Call, Signer>(
+async fn submit_extrinsic<'a, T, Call, Signer>(
     client: &OnlineClient<T>,
     call: &Call,
-    signer: &Signer,
+    signer: &'a Signer,
 ) -> core::result::Result<blocks::ExtrinsicEvents<T>, subxt::Error>
 where
     T: Config,
+    T::Index: From<u32>,
+    &'a T::AccountId: Borrow<AccountId32>,
     Call: tx::TxPayload,
     Signer: tx::Signer<T>,
     <T::ExtrinsicParams as config::ExtrinsicParams<T::Index, T::Hash>>::OtherParams:
         Default,
 {
+    let nonce_location = runtime_api::api::storage()
+        .system()
+        .account(signer.account_id());
+    let current_nonce = client
+        .storage()
+        .at(None)
+        .await?
+        .fetch(&nonce_location)
+        .await?
+        .map(|acc| acc.nonce)
+        .unwrap_or_default();
+    let nonce_offset: u32 = env::var("NONCE_OFFSET")
+        .unwrap_or_default()
+        .parse()
+        .expect("you are smarter than that");
+    let nonce = current_nonce.checked_add(nonce_offset).expect("really?");
     client
         .tx()
-        .sign_and_submit_then_watch_default(call, signer)
+        .create_signed_with_nonce(call, signer, nonce.into(), Default::default())?
+        .submit_and_watch()
         .await?
         .wait_for_in_block()
         .await?
